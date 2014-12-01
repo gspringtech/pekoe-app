@@ -33,6 +33,7 @@ declare variable $local:tenant-path := "/db/pekoe/tenants/" || $local:tenant;
 declare variable $local:current-user := sm:id()//sm:real;
 
 
+
 (:
 <sm:id xmlns:sm="http://exist-db.org/xquery/securitymanager">
     <sm:real>
@@ -119,6 +120,7 @@ declare function local:table-wrapper($path, $colName, $rows) {
                <div title="collection:{$colName}" class='action new'>
                  Make a new:  
                  <form method="GET">
+                    <input type='hidden' name='collection' value='{$path}' />
                     <select name='doctype' >
                         <option></option>
                         <option value="collection">Folder</option>
@@ -133,7 +135,7 @@ declare function local:table-wrapper($path, $colName, $rows) {
                        local:doctype-options()
                     }
                     </select> named: <input type='text' name='file-name' />
-                    <input type='submit' class='list' name='action' value='New' /> (in {$colName})
+                    <input type='submit' class='list' name='action' value='New' /> (in {$path})
                     </form>
                </div> 
             else () }
@@ -162,6 +164,11 @@ declare function local:table-wrapper($path, $colName, $rows) {
     
 };
   
+declare function local:get-ordered-items($items) {
+    for $c in $items
+    order by $c
+    return $c
+};
 
 (:
     This is the main list query.
@@ -179,18 +186,21 @@ declare function local:display-collection()
     let $resources := xmldb:get-child-resources($real-collection-path)[substring-after(.,".") eq 'xml']
     let $params := "collection=" || $logical-path
     let $pagination-map := list-wrapper:pagination-map($params, ($collections,$queries,$resources)) (: Count the items, work out start and end indices. :)
-    
+    let $debug := util:log('debug', 'GOT ITEMS ' || $pagination-map('items'))
 (:    let $parent-col := local:get-parent-collection($real-collection-path):)
     let $count := count($collections)
-    let $col-rows := for $c in $collections[position() = $pagination-map('start') to $pagination-map('end')] order by $c return local:format-collection($logical-path, $real-collection-path, $c)
-    let $start := $pagination-map('start') - $count + 1,
+(:    NOTE this looks like a bug in eXist-db. In the first form, the ordering is all wrong when the position() is used before sorting. :)
+(:    let $col-rows := for $c in $collections[position() = $pagination-map('start') to $pagination-map('end')] order by $c return local:format-collection($logical-path, $real-collection-path, $c):)
+    let $col-rows := for $c in local:get-ordered-items($collections)[position() = $pagination-map('start') to $pagination-map('end')] return local:format-collection($logical-path, $real-collection-path, $c)
+    
+    let $start := $pagination-map('start') - $count ,
         $end := $pagination-map('end') - $count,
         $count := count($queries)
-    let $query-rows := for $c in $queries[position() = $start to $end] order by $c return local:format-query($logical-path, $real-collection-path, $c)
-    let $start := $start - $count + 1,
+    let $query-rows := for $c in local:get-ordered-items($queries)[position() = $start to $end] order by $c return local:format-query($logical-path, $real-collection-path, $c)
+    let $start := $start - $count ,
         $end := $end - $count,
         $count := count($resources)
-    let $resource-rows := for $c in $resources[position() = $start to $end] order by $c return local:format-resource($logical-path, $real-collection-path, $c)
+    let $resource-rows := for $c in local:get-ordered-items($resources)[position() = $start to $end] order by $c return local:format-resource($logical-path, $real-collection-path, $c)
     let $results := map {
         'title' := $logical-path,
         'path' := $logical-path,
@@ -459,12 +469,18 @@ declare function local:get-parent-collection($path as xs:string) as xs:string {
 
 
 (:  This is nice, but doesn't add an ID and allows creation of fragment-elements (like "item" which is a child of ca-resources) :)
-declare function local:new-file($doctype, $colname,$file-name) {
+declare function local:new-file($doctype, $colname,$file-name, $group-user) {
     let $new-file := element {$doctype} {
-        attribute created-by {sm:id()//sm:username/text()}, 
-        attribute created-dateTime {current-dateTime()}
+    attribute created-dateTime {current-dateTime()},
+    attribute created-by {$local:current-user/sm:username/text()}
+        
         }
-    return xmldb:store($colname, $file-name, $new-file)
+    let $new := xmldb:store($colname, $file-name, $new-file)
+    let $uri := xs:anyURI($new)
+    let $chown := sm:chown($uri, $group-user)
+    let $chgrp := sm:chgrp($uri,$group-user)
+    let $chmod := sm:chmod($uri,'r--r-----')
+    return $new 
 };
 
 declare function local:good-file-name($n,$type) {
@@ -481,12 +497,7 @@ declare function local:good-file-name($n,$type) {
     setGid will ensure that all collections and resources in a tenancy will belong to the group-user.
 
 :)
-(:
-declare function local:new-collection($group-user, $full-path, $file-name){
-    xmldb:create-collection($full-path,$file-name),
-    let $new-resource := $full-path || '/' || $file-name
-    
-};:)
+
 
 declare function local:do-new() {
     let $path := request:get-parameter("collection",$local:base-collection)
@@ -495,15 +506,28 @@ declare function local:do-new() {
     let $item-type := request:get-parameter("doctype","") 
     let $group-user := sm:get-permissions(xs:anyURI($full-path))//@group/string()   
     let $file-name := local:good-file-name(request:get-parameter("file-name",""),$item-type)
-(:    let $redirect-path := response:set-header("RESET_PARAMS","action=browse") (\:The header MUST have a value or it won't be received by the client:\):)
+    let $debug := util:log('debug', 'GOING TO CREATE ' || $full-path || ' / ' || $file-name)
+(:    NOTE: must find a way to redirect after this. Perhaps this should be a POST anyway - as we are 
+creating a resource. The automatic RELOAD is causing this action to run again. :)
+    (:let $redirect-path := response:set-header("RESET_PARAMS","action=browse"):) (:The header MUST have a value or it won't be received by the client:)
     return 
         if ($item-type eq "" or $file-name eq "") then local:display-collection()
         else 
         let $result :=  
             if ($item-type eq "collection")            
-            then system:as-user($group-user, "staffer", xmldb:create-collection($full-path,$file-name)) (: TODO fix permissions and ownership :)
-            else local:new-file($item-type,$full-path,$file-name)
-        return local:display-collection()
+            then (
+            let $new := xmldb:create-collection($full-path,$file-name)
+            let $uri := xs:anyURI($new)
+            let $chown := sm:chown($uri, $group-user)
+            let $chgrp := sm:chgrp($uri, $group-user)
+            let $chmod := sm:chmod($uri,'rwxrwx---')
+            return $new 
+            (: TODO fix permissions and ownership :)
+            )
+            else local:new-file($item-type,$full-path,$file-name, $group-user)
+(:            https://owl.local/exist/rest/db/apps/pekoe/files.xql?collection=%2Ffiles&doctype=todo&file-name=test&action=New
+:)
+        return response:redirect-to(xs:anyURI(request:get-url() || '?collection=' || $path))
 };
 
 declare function local:title($path-parts) {
@@ -514,7 +538,7 @@ declare function local:title($path-parts) {
 (: ************************** MAIN QUERY *********************** :)
 
         
-        
+        try {
     (: browse is the default action :)
          if ($local:action eq "browse") then local:display-collection()
     else if ($local:action eq "Search") then local:display-search-results()
@@ -522,4 +546,6 @@ declare function local:title($path-parts) {
     else if ($local:action eq "JSON")   then local:json-xpath-lookup()
     else if ($local:action eq "New")    then local:do-new()
     else <result status='error'>Unknown action {$local:action} </result>
+    
+    } catch * { $err:code || ": " || $err:description }
             

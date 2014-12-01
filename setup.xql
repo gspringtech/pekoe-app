@@ -21,10 +21,11 @@ declare function local:fix-collection-and-resource-permissions($col,$groupUser) 
 declare function local:common-schemas() {
   let $path := xs:anyURI('/db/pekoe/schemas')
   let $owner := sm:chown($path,"admin")
-  let $group := sm:chgrp($path,"pekoe-staff")
+  let $group := sm:chgrp($path,"tenants-group")
   let $mode := sm:chmod($path, 'rwxr-x---')
   return sm:get-permissions($path)
 };
+
 
 
 (:tenant:create('bkfa','Birthing Kit Foundation Australia'):)

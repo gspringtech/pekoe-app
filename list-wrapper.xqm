@@ -51,9 +51,9 @@ else
             return
             
             ((:Go First:)<li>{if ($current eq 1) then attribute class {'disabled'} else ()}<a href="?{$path-params}p=1" title='First'><i class='fa fa-angle-double-left'></i></a></li>,
-            (: Go Prev:)<li>{if ($current eq 1) then attribute class {'disabled'} else ()}<a title='Previous' href="?{$path-params}p={$current - 1}"><i class='fa fa-angle-left'></i></a></li>,
+            (: Go Prev:)<li>{if ($current eq 1) then attribute class {'disabled'} else ()}<a title='Previous' href="?{$path-params}p={if ($current ne 1) then $current - 1 else ()}"><i class='fa fa-angle-left'></i></a></li>,
             (for $n in $first to $last return <li>{if ($n eq $current) then attribute class {'active'} else () }<a href='?{$path-params}p={$n}'>{$n}</a></li>),
-            (: Go Next:)<li>{if ($current eq $total) then attribute class {'disabled'} else ()}<a title='Next' href="?{$path-params}p={$current + 1}"><i class='fa fa-angle-right'></i></a></li>,
+            (: Go Next:)<li>{if ($current eq $total) then attribute class {'disabled'} else ()}<a title='Next' href="?{$path-params}p={if ($current eq $total) then $current else $current + 1}"><i class='fa fa-angle-right'></i></a></li>,
             (: Go Last:)<li>{if ($current eq $total) then attribute class {'disabled'} else ()}<a title='Last' href="?{$path-params}p={$total}"><i class='fa fa-angle-double-right'></i> ({$total})</a></li>
             
             )
@@ -74,7 +74,7 @@ declare function list-wrapper:pagination-map($params, $items) {
     (See querytools.xqm )
     
     :)
-    let $records-per-page := local:get-request-as-number("rpp",10)
+    let $records-per-page := 10 (:local:get-request-as-number("rpp",10):)
     let $current-page := local:get-request-as-number("p",1)
     let $count := count($items)
     let $total-pages := xs:integer(ceiling($count div $records-per-page))
@@ -126,7 +126,7 @@ declare function list-wrapper:wrap($content) {
         <button id='deleteItem' type='button' class='btn btn-default p-needs-selection'>Delete</button>
     </div>
     <div class='btn-group' role='group' aria-label='Breadcrumbs'>
-        <ol class='breadcrumb'>{list-wrapper:breadcrumbs($content('base-path'), $content('path'))}</ol>
+        <ol class='breadcrumb'>{$content('breadcrumbs')}</ol>
     </div>
     <div class='btn-group' role='group' aria-label=''>
         <button id='refresh' type='button' class='btn btn-default'>Refresh</button>    
