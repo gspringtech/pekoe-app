@@ -2,6 +2,21 @@ xquery version "3.0";
 
 import module namespace dbutil = "http://exist-db.org/xquery/dbutil" at '/db/apps/shared-resources/content/dbutils.xql';
 
+(: 
+ : Pekoe security has several aspects.
+ : First, to login, a user must belong to pekoe-staff
+ : Second, to access any resources, the user must belong to tenants-group.
+ : Third, to view a tenant's resources, the user must belong to the <tenant>_staff group.
+ : So each <tenant> must have a <tenant>_staff user and group created. (The tenants.xql can do that when a tenant is created.)
+ : The <tenant>_staff user DOES NOT belong to pekoe-staff - so this user is unable to login.
+ : 
+ : All resources belonging to a tenant are owned by the <tenant>_staff user, and have r--r----- mode.
+ : These resources are "closed-and-available". 
+ : When a User opens a resource for editing, the user becomes the owner and the mode changes to rwxr-----.
+ : 
+ :  :)
+
+
 declare function local:fix-collection-and-resource-permissions($col,$groupUser) {
 (:  dbutil:scan doesn't process binaries  :)
     dbutil:scan(xs:anyURI($col),
