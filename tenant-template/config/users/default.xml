@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<prefs for="">
+    <bookmarks type="application/json" note="treat as text only"> 
+        { "groups" : [
+        {
+        "title" : "Favourites...",
+        "items" : [
+        { "title" : "Welcome",
+        "href" : "/exist/restxq/pekoe/welcome",
+        "type" : "html"
+        },  
+        {
+        "title" : "Files",
+        "href" : "/exist/rest/db/apps/pekoe/files.xql?collection=/files",
+        "type" : "html"                
+        }
+        ]
+        
+        }
+        ]}
+        
+    </bookmarks>
+</prefs>
